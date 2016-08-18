@@ -34,11 +34,7 @@ public class FastCGIServerResponse : ServerResponse {
     ///
     /// Buffer for HTTP response line, headers, and short bodies
     ///
-    #if os(Linux)
-        private var buffer = Data(capacity: FastCGIServerResponse.bufferSize)!
-    #else
-        private var buffer = Data(capacity: FastCGIServerResponse.bufferSize)
-    #endif
+    private let buffer: NSMutableData = NSMutableData(capacity: FastCGIServerResponse.bufferSize)!
 
     ///
     /// Whether or not the HTTP response line and headers have been flushed.
@@ -100,15 +96,19 @@ public class FastCGIServerResponse : ServerResponse {
     //
     // Actual write methods
     //
-    public func write(from data: Data) throws {
+    public func write(from data: NSData) throws {
         
         try startResponse()
         
-        if (buffer.count + data.count) > FastCGIServerResponse.bufferSize {
+        if (buffer.length + data.length) > FastCGIServerResponse.bufferSize {
             try flush()
         }
         
-        buffer.append(data)
+        #if os(Linux)
+            buffer.append(Data._unconditionallyBridgeFromObjectiveC(data))
+        #else
+            buffer.append(data as Data)
+        #endif
     }
     
     public func end() throws {
@@ -158,7 +158,7 @@ public class FastCGIServerResponse : ServerResponse {
     /// 
     /// Get messages for FastCGI.
     ///
-    private func getEndRequestMessage(requestId: UInt16, protocolStatus: UInt8) throws -> Data {
+    private func getEndRequestMessage(requestId: UInt16, protocolStatus: UInt8) throws -> NSData {
         
         let record = FastCGIRecordCreate()
         
@@ -174,7 +174,7 @@ public class FastCGIServerResponse : ServerResponse {
     // Generate a "request complete" message to be transmitted to the server, indicating 
     // that the response is finished.
     //
-    private func getRequestCompleteMessage() throws -> Data {
+    private func getRequestCompleteMessage() throws -> NSData {
         
         guard let serverRequest = self.serverRequest else {
             throw FastCGI.RecordErrors.internalError
@@ -190,7 +190,7 @@ public class FastCGIServerResponse : ServerResponse {
     // This indicates to the calling web server that we won't be honoring requests
     // beyond the first one until the first one is complete.
     //
-    private func getNoMultiplexingMessage(requestId: UInt16) throws -> Data {
+    private func getNoMultiplexingMessage(requestId: UInt16) throws -> NSData {
         return try getEndRequestMessage(requestId: requestId, protocolStatus: FastCGI.Constants.FCGI_CANT_MPX_CONN)
     }
 
@@ -198,16 +198,19 @@ public class FastCGIServerResponse : ServerResponse {
     // Generate an "unsupported role" message. Indicaes to the calling web server
     // that we only intend to fulfill a specific role in the FastCGI chain (responder).
     //
-    private func getUnsupportedRoleMessage() throws -> Data? {
+    private func getUnsupportedRoleMessage() throws -> NSData? {
         
         guard let serverRequest = self.serverRequest else {
             throw FastCGI.RecordErrors.internalError
         }
-        guard serverRequest.requestId != FastCGI.Constants.FASTCGI_DEFAULT_REQUEST_ID else {
+        guard let requestId : UInt16 = serverRequest.requestId else {
+            throw FastCGI.RecordErrors.internalError
+        }
+        guard requestId != FastCGI.Constants.FASTCGI_DEFAULT_REQUEST_ID else {
             throw FastCGI.RecordErrors.internalError
         }
         
-        return try getEndRequestMessage(requestId: serverRequest.requestId, protocolStatus: FastCGI.Constants.FCGI_UNKNOWN_ROLE)
+        return try getEndRequestMessage(requestId: requestId, protocolStatus: FastCGI.Constants.FCGI_UNKNOWN_ROLE)
         
     }
 
@@ -215,7 +218,9 @@ public class FastCGIServerResponse : ServerResponse {
     /// External message write for multiplex rejection    
     ///
     public func rejectMultiplexConnecton(requestId: UInt16) throws {
-        let message = try getNoMultiplexingMessage(requestId: requestId)
+        guard let message : NSData = try getNoMultiplexingMessage(requestId: requestId) else {
+            return
+        }
         try writeToSocket(message, wrapAsMessage: false)
     }
     
@@ -223,7 +228,7 @@ public class FastCGIServerResponse : ServerResponse {
     /// External message write for role rejection
     ///
     public func rejectUnsupportedRole() throws {
-        guard let message = try getUnsupportedRoleMessage() else {
+        guard let message : NSData = try getUnsupportedRoleMessage() else {
             return
         }
         try writeToSocket(message, wrapAsMessage: false)
@@ -241,7 +246,7 @@ public class FastCGIServerResponse : ServerResponse {
     /// Get a FastCGI STDOUT message, wrapping the specified data
     /// for delivery.
     ///
-    private func getMessage(buffer: Data?) throws -> Data {
+    private func getMessage(buffer: NSData?) throws -> NSData {
         
         let record = FastCGIRecordCreate()
         
@@ -259,7 +264,7 @@ public class FastCGIServerResponse : ServerResponse {
     ///
     /// Write NSData to the socket
     ///
-    private func writeToSocket(_ data: Data, wrapAsMessage: Bool = true) throws {
+    private func writeToSocket(_ data: NSData, wrapAsMessage: Bool = true) throws {
 
         guard let socket = socket else {
             return
@@ -279,13 +284,13 @@ public class FastCGIServerResponse : ServerResponse {
     ///
     private func flush() throws {
         
-        guard buffer.count > 0 else {
+        guard buffer.length > 0 else {
             return
         }
     
         try writeToSocket(buffer)
         
-        buffer.count = 0
+        buffer.length = 0
         
     }
     

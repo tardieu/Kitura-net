@@ -39,10 +39,12 @@ public protocol ServerResponse: class {
     
     /// Write data as a response
     ///
-    /// - Parameter data: Data object that contains the data to be written.
+    /// - Parameter data: NSMutableData object to contain read data.
+    ///
+    /// - Returns: Integer representing the number of bytes read.
     ///
     /// - Throws: Socket.error if an error occurred while writing to a socket
-    func write(from data: Data) throws
+    func write(from data: NSData) throws
     
     /// End the response
     ///

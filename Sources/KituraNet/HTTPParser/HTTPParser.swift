@@ -74,20 +74,20 @@ class HTTPParser {
 
         settings.on_url = { (parser, chunk, length) -> Int32 in
             let p = UnsafePointer<HTTPParserDelegate?>(parser?.pointee.data)
-            let data = Data(bytes: UnsafePointer<UInt8>(chunk!), count: length)
+            let data = NSData(bytes: chunk, length: length)
             p?.pointee?.onURL(data)
             return 0
         }
         
         settings.on_header_field = { (parser, chunk, length) -> Int32 in
-            let data = Data(bytes: UnsafePointer<UInt8>(chunk!), count: length)
+            let data = NSData(bytes: chunk, length: length)
             let p = UnsafePointer<HTTPParserDelegate?>(parser?.pointee.data)
             p?.pointee?.onHeaderField(data)
             return 0
         }
         
         settings.on_header_value = { (parser, chunk, length) -> Int32 in
-            let data = Data(bytes: UnsafePointer<UInt8>(chunk!), count: length)
+            let data = NSData(bytes: chunk, length: length)
             let p = UnsafePointer<HTTPParserDelegate?>(parser?.pointee.data)
             p?.pointee?.onHeaderValue(data)
             return 0
@@ -96,7 +96,7 @@ class HTTPParser {
         settings.on_body = { (parser, chunk, length) -> Int32 in
             let p = UnsafePointer<HTTPParserDelegate?>(parser?.pointee.data)
             if p?.pointee?.saveBody == true {
-                let data = Data(bytes: UnsafePointer<UInt8>(chunk!), count: length)
+                let data = NSData(bytes: chunk, length: length)
                 p?.pointee?.onBody(data)
             }
             return 0
@@ -176,12 +176,12 @@ class HTTPParser {
 ///
 protocol HTTPParserDelegate: class {
     var saveBody : Bool { get }
-    func onURL(_ url: Data)
-    func onHeaderField(_ data: Data)
-    func onHeaderValue(_ data: Data)
+    func onURL(_ url:NSData)
+    func onHeaderField(_ data: NSData)
+    func onHeaderValue(_ data: NSData)
     func onHeadersComplete(method: String, versionMajor: UInt16, versionMinor: UInt16)
     func onMessageBegin()
     func onMessageComplete()
-    func onBody(_ body: Data)
+    func onBody(_ body: NSData)
     func prepareToReset()    
 }

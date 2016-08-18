@@ -31,7 +31,7 @@ class FastCGIRecordCreate {
     var recordType : UInt8 = FastCGI.Constants.FCGI_NO_TYPE
     var protocolStatus : UInt8 = FastCGI.Constants.FCGI_SUBTYPE_NO_TYPE
     var requestId : UInt16 = FastCGI.Constants.FASTCGI_DEFAULT_REQUEST_ID
-    var data : Data?
+    var data : NSData?
     var requestRole : UInt16 = FastCGI.Constants.FCGI_NO_ROLE
     var keepAlive : Bool = false
     var parameters : [(String,String)] = []
@@ -39,10 +39,10 @@ class FastCGIRecordCreate {
     //
     // Append one or more zero bytes to the provided NSMutableData object
     //
-    private func appendZeroes(data: inout Data, count: Int) {
+    private func appendZeroes(data: NSMutableData, count: Int) {
         var zeroByte : UInt8 = 0
         for _ in 1...count {
-            data.append(&zeroByte, count: 1)
+            data.append(&zeroByte, length: 1)
         }
     }
     
@@ -70,25 +70,20 @@ class FastCGIRecordCreate {
         #endif
     }
     
-    // A helper method to append various types to a Data object
-    private func appendBytes(to: inout Data, bytes: UnsafePointer<Void>, count: Int) {
-        to.append(UnsafePointer<UInt8>(bytes), count: count)
-    }
-    
     //
     // Create the shared starting portion of a FastCGI,
     // shared by all FastCGI records we'll be generating
     //
-    private func createRecordStarter() -> Data {
-        var r = Data()
+    private func createRecordStarter() -> NSMutableData {
+        let r = NSMutableData()
         
         var v : UInt8 = FastCGI.Constants.FASTCGI_PROTOCOL_VERSION
         var t : UInt8 = recordType
         var requestId : UInt16 = FastCGIRecordCreate.getNetworkByteOrderSmall(from: self.requestId)
         
-        r.append(&v, count: 1)
-        r.append(&t, count: 1)
-        appendBytes(to: &r, bytes: &requestId, count: 2)
+        r.append(&v, length: 1)
+        r.append(&t, length: 1)
+        r.append(&requestId, length: 2)
         
         return r
     }
@@ -96,28 +91,28 @@ class FastCGIRecordCreate {
     //
     // Generate an "END REQUEST" record of subtype "COMPLETE"
     //
-    private func finalizeRequestCompleteRecord(data: inout Data) -> Data {
+    private func finalizeRequestCompleteRecord(data: NSMutableData) -> NSData {
         
         var contentLength : UInt16 = FastCGIRecordCreate.getNetworkByteOrderSmall(from: UInt16(8))
         var protocolStatus : UInt8 = self.protocolStatus
         
         // content length
-        appendBytes(to: &data, bytes: &contentLength, count: 2)
+        data.append(&contentLength, length: 2)
         
         // padding length
-        appendZeroes(data: &data, count: 1)
+        appendZeroes(data: data, count: 1)
         
         // reserved space
-        appendZeroes(data: &data, count: 1)
+        appendZeroes(data: data, count: 1)
         
         // application id - we don't use this
-        appendZeroes(data: &data, count: 4)
+        appendZeroes(data: data, count: 4)
         
         // protocol status
-        appendBytes(to: &data, bytes: &protocolStatus, count: 1)
+        data.append(&protocolStatus, length: 1)
 
         // reserved space
-        appendZeroes(data: &data, count: 3)
+        appendZeroes(data: data, count: 3)
         
         return data
     }
@@ -125,29 +120,29 @@ class FastCGIRecordCreate {
     //
     // Generate a "BEGIN REQUEST" record
     //
-    private func finalizeRequestBeginRecord(data: inout Data) -> Data {
+    private func finalizeRequestBeginRecord(data: NSMutableData) -> NSData {
         
         var contentLength : UInt16 = FastCGIRecordCreate.getNetworkByteOrderSmall(from: 8)
         var requestRole : UInt16 = FastCGIRecordCreate.getNetworkByteOrderSmall(from: self.requestRole)
         var flags : UInt8 = keepAlive ? FastCGI.Constants.FCGI_KEEP_CONN : 0
         
         // content length
-        appendBytes(to: &data, bytes: &contentLength, count: 2)
+        data.append(&contentLength, length: 2)
         
         // padding length
-        appendZeroes(data: &data, count: 1)
+        appendZeroes(data: data, count: 1)
         
         // reserved space
-        appendZeroes(data: &data, count: 1)
+        appendZeroes(data: data, count: 1)
         
         // request role
-        appendBytes(to: &data, bytes: &requestRole, count: 2)
+        data.append(&requestRole, length: 2)
         
         // flags
-        data.append(&flags, count: 1)
+        data.append(&flags, length: 1)
         
         // reserved space
-        appendZeroes(data: &data, count: 5)
+        appendZeroes(data: data, count: 5)
         
         return data
     }
@@ -155,15 +150,15 @@ class FastCGIRecordCreate {
     //
     // Write encoded length (8 bit or 4x8bit) for a param record
     //
-    private func writeEncodedLength(length: Int, into: inout Data) {
+    private func writeEncodedLength(length: Int, into: NSMutableData) {
         
         if length > 127 {
             var encodedLength : UInt32 = FastCGIRecordCreate.getNetworkByteOrderLarge(from: UInt32(length)) | ~0xffffff7f
-            appendBytes(to: &into, bytes: &encodedLength, count: 4)
+            into.append(&encodedLength, length: 4)
         }
         else {
             var encodedLength : UInt8 = UInt8(length)
-            into.append(&encodedLength, count: 1)
+            into.append(&encodedLength, length: 1)
         }
         
     }
@@ -171,30 +166,35 @@ class FastCGIRecordCreate {
     //
     // Generate parameter records
     //
-    private func createParameterRecords() -> Data {
+    private func createParameterRecords() -> NSData {
         
-        var content = Data()
+        let content : NSMutableData = NSMutableData()
         
         for (key, value) in parameters {
 
             // generate our key and value by converting to 
             // Data from String using UTF-8.
             //
-            guard let keyData = StringUtils.toUtf8String(key) else {
+            guard let keyData : NSData = StringUtils.toUtf8String(key) else {
                 // this key couldn't be copied as data, skip the parameter
                 continue
             }
             
-            guard let valueData = StringUtils.toUtf8String(value)  else {
+            guard let valueData : NSData = StringUtils.toUtf8String(value)  else {
                 // this key couldn't be copied as data, skip the parameter
                 continue
             }
             
-            writeEncodedLength(length: keyData.count, into: &content)
-            writeEncodedLength(length: valueData.count, into: &content)
+            writeEncodedLength(length: keyData.length, into: content)
+            writeEncodedLength(length: valueData.length, into: content)
             
-            content.append(keyData)
-            content.append(valueData)
+            #if os(Linux)
+                content.append(Data._unconditionallyBridgeFromObjectiveC(keyData))
+                content.append(Data._unconditionallyBridgeFromObjectiveC(valueData))
+            #else
+                content.append(keyData as Data)
+                content.append(valueData as Data)
+            #endif
         }
         
         return content
@@ -203,21 +203,21 @@ class FastCGIRecordCreate {
     //
     // Generate a parameters (PARAMS) record
     //
-    private func finalizeParameters(data: inout Data) -> Data {
+    private func finalizeParameters(data: NSMutableData) -> NSData {
         self.data = createParameterRecords()
-        return finalizeDataRecord(data: &data)
+        return finalizeDataRecord(data: data)
     }
     
     //
     // Generate a data (STDOUT) record
     //
-    private func finalizeDataRecord(data: inout Data) -> Data {
+    private func finalizeDataRecord(data: NSMutableData) -> NSData {
         
-        let contentData = self.data == nil ? Data() : self.data!
-        var contentLength : UInt16 = FastCGIRecordCreate.getNetworkByteOrderSmall(from: UInt16(contentData.count))
+        let contentData : NSData = self.data == nil ? NSData() : self.data!
+        var contentLength : UInt16 = FastCGIRecordCreate.getNetworkByteOrderSmall(from: UInt16(contentData.length))
         
         // note that we will align all of our data structures to 8 bytes
-        var paddingLength : Int = Int(contentData.count % 8)
+        var paddingLength : Int = Int(contentData.length % 8)
         
         if paddingLength > 0 {
             paddingLength = 8 - paddingLength
@@ -225,17 +225,21 @@ class FastCGIRecordCreate {
 
         var paddingLengthEncoded : UInt8 = UInt8(paddingLength)
 
-        appendBytes(to: &data, bytes: &contentLength, count: 2)
-        data.append(&paddingLengthEncoded, count: 1)
+        data.append(&contentLength, length: 2)
+        data.append(&paddingLengthEncoded, length: 1)
         
         // reserved space
-        appendZeroes(data: &data, count: 1)
+        appendZeroes(data: data, count: 1)
         // write our data block
-        data.append(contentData)
+        #if os(Linux)
+            data.append(Data._unconditionallyBridgeFromObjectiveC(contentData))
+        #else
+            data.append(contentData as Data)
+        #endif
         
         // write any padding
         if paddingLength > 0 {
-            appendZeroes(data: &data, count: paddingLength)
+            appendZeroes(data: data, count: paddingLength)
         }
         
         return data
@@ -292,10 +296,10 @@ class FastCGIRecordCreate {
         // check that our data object, if any, isn't larger 
         // than 16-bits addressable worth of data
         //
-        guard let data = data else {
+        guard let data : NSData = self.data else {
             return
         }
-        guard data.count <= 65535 else {
+        guard data.length <= 65535 else {
             throw FastCGI.RecordErrors.oversizeData
         }
         
@@ -304,26 +308,26 @@ class FastCGIRecordCreate {
     //
     // Generate the record currently contained by the class
     //
-    func create() throws -> Data {
+    func create() throws -> NSData {
         
         // rely on throw to abort if there is an issue
         try recordTest()
         
-        var record = createRecordStarter()
+        let record : NSMutableData = createRecordStarter()
         
         switch recordType {
         case FastCGI.Constants.FCGI_BEGIN_REQUEST:
-            return finalizeRequestBeginRecord(data: &record)
+            return finalizeRequestBeginRecord(data: record)
             
         case FastCGI.Constants.FCGI_END_REQUEST:
-            return finalizeRequestCompleteRecord(data: &record)
+            return finalizeRequestCompleteRecord(data: record)
             
         case FastCGI.Constants.FCGI_PARAMS:
-            return finalizeParameters(data: &record)
+            return finalizeParameters(data: record)
             
         default:
             // either STDIN or STDOUT
-            return finalizeDataRecord(data: &record)
+            return finalizeDataRecord(data: record)
         }
         
     }

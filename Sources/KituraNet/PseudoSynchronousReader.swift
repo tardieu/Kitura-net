@@ -41,7 +41,7 @@ class PseudoSynchronousReader {
     private let clientSocket: Socket
     
     private var noDataToRead = true
-    private var buffer = Data()
+    private let buffer = NSMutableData()
 
     #if os(Linux)
         private let readingSemaphore: dispatch_semaphore_t
@@ -65,13 +65,17 @@ class PseudoSynchronousReader {
     /// Add data to the internal buffer to be read by the raed function
     ///
     /// - Parameter from: The NSData object containing the data to be added
-    func addDataToRead(from: Data) {
-        let needToLock = buffer.count != 0
+    func addDataToRead(from: NSData) {
+        let needToLock = buffer.length != 0
         if  needToLock {
             lockReadLock()
         }
         
-        buffer.append(from)
+        #if os(Linux)
+            buffer.append(Data._unconditionallyBridgeFromObjectiveC(from))
+        #else
+            buffer.append(from as Data)
+        #endif
         
         if  noDataToRead  {
             #if os(Linux)
@@ -89,7 +93,7 @@ class PseudoSynchronousReader {
     /// Read data from the buffer to the specified NSMutableData
     ///
     /// - Parameter into: The NSMutableData object to append the data in the buffer to.
-    func read(into: inout Data) -> Int {
+    func read(into: NSMutableData) -> Int {
         if  noDataToRead  {
             #if os(Linux)
                 dispatch_semaphore_wait(readingSemaphore, DISPATCH_TIME_FOREVER)
@@ -98,13 +102,17 @@ class PseudoSynchronousReader {
             #endif
         }
         let result: Int
-        if  buffer.count != 0  {
+        if  buffer.length != 0  {
             lockReadLock()
             
-            result = buffer.count
-            into.append(buffer)
+            result = buffer.length
+            #if os(Linux)
+                into.append(Data._unconditionallyBridgeFromObjectiveC(buffer))
+            #else
+                into.append(buffer as Data)
+            #endif
             
-            buffer.count = 0
+            buffer.length = 0
             noDataToRead = true
             
             unlockReadLock()

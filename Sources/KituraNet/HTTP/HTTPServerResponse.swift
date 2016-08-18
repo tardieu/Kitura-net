@@ -26,7 +26,7 @@ public class HTTPServerResponse : ServerResponse {
     private static let bufferSize = 2000
 
     /// Buffer for HTTP response line, headers, and short bodies
-    private var buffer: Data
+    private var buffer: NSMutableData
 
     /// Whether or not the HTTP response line and headers have been flushed.
     private var startFlushed = false
@@ -66,11 +66,7 @@ public class HTTPServerResponse : ServerResponse {
     init(processor: IncomingHTTPSocketProcessor) {
 
         self.processor = processor
-        #if os(Linux)
-            buffer = Data(capacity: HTTPServerResponse.bufferSize)!
-        #else
-            buffer = Data(capacity: HTTPServerResponse.bufferSize)
-        #endif
+        buffer = NSMutableData(capacity: HTTPServerResponse.bufferSize)!
         headers["Date"] = [SPIUtils.httpDate()]
     }
 
@@ -91,23 +87,29 @@ public class HTTPServerResponse : ServerResponse {
     ///
     /// Write data as a response
     ///
-    /// - Parameter data: Data object that contains the data to be written.
+    /// - Parameter data: NSMutableData object to contain read data.
+    ///
+    /// - Returns: Integer representing the number of bytes read.
     ///
     /// - Throws: Socket.error if an error occurred while writing to a socket
     ///
-    public func write(from data: Data) throws {
+    public func write(from data: NSData) throws {
 
         if  let processor = processor {
             try flushStart()
-            if  buffer.count + data.count > HTTPServerResponse.bufferSize  &&  buffer.count != 0  {
+            if  buffer.length + data.length > HTTPServerResponse.bufferSize  &&  buffer.length != 0  {
                 processor.write(from: buffer)
-                buffer.count = 0
+                buffer.length = 0
             }
-            if  data.count > HTTPServerResponse.bufferSize {
+            if  data.length > HTTPServerResponse.bufferSize {
                 processor.write(from: data)
             }
             else {
-                buffer.append(data)
+                #if os(Linux)
+                    buffer.append(Data._unconditionallyBridgeFromObjectiveC(data))
+                #else
+                    buffer.append(data as Data)
+                #endif
             }
         }
 
@@ -141,7 +143,7 @@ public class HTTPServerResponse : ServerResponse {
                 processor.keepAlive()
             }
             
-            if  buffer.count > 0  {
+            if  buffer.length > 0  {
                 processor.write(from: buffer)
             }
             
@@ -204,22 +206,26 @@ public class HTTPServerResponse : ServerResponse {
             return
         }
 
-        if  buffer.count + utf8Data.count > HTTPServerResponse.bufferSize  &&  buffer.count != 0  {
+        if  buffer.length + utf8Data.length > HTTPServerResponse.bufferSize  &&  buffer.length != 0  {
             processor.write(from: buffer)
-            buffer.count = 0
+            buffer.length = 0
         }
-        if  utf8Data.count > HTTPServerResponse.bufferSize {
+        if  utf8Data.length > HTTPServerResponse.bufferSize {
             processor.write(from: utf8Data)
         }
         else {
-            buffer.append(utf8Data)
+            #if os(Linux)
+                buffer.append(Data._unconditionallyBridgeFromObjectiveC(utf8Data))
+            #else
+                buffer.append(utf8Data as Data)
+            #endif
         }
     }
     
     /// Reset this response object back to it's initial state
     public func reset() {
         status = HTTPStatusCode.OK.rawValue
-        buffer.count = 0
+        buffer.length = 0
         startFlushed = false
         headers.removeAll()
         headers["Date"] = [SPIUtils.httpDate()]

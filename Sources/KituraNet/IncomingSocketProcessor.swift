@@ -33,10 +33,10 @@ public protocol IncomingSocketProcessor: class {
 
     /// Process data read from the socket. It is either passed to the HTTP parser or
     /// it is saved in the Pseudo synchronous reader to be read later on.
-    func process(_ buffer: Data)
+    func process(_ buffer: NSData)
     
     /// Write data to the socket
-    func write(from data: Data)
+    func write(from data: NSData)
     
     /// Close the socket and mark this handler as no longer in progress.
     func close()

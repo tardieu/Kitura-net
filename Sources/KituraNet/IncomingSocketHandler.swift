@@ -91,14 +91,14 @@ public class IncomingSocketHandler {
     
     /// Read in the available data and hand off to common processing code
     func handleRead() {
-        var buffer = Data()
+        let buffer = NSMutableData()
         
         do {
             var length = 1
             while  length > 0  {
-                length = try socket.read(into: &buffer)
+                length = try socket.read(into: buffer)
             }
-            if  buffer.count > 0  {
+            if  buffer.length > 0  {
                 processor?.process(buffer)
             }
             else {
@@ -115,7 +115,7 @@ public class IncomingSocketHandler {
     }
     
     /// Write data to the socket
-    func write(from data: Data) {
+    func write(from data: NSData) {
         guard socket.socketfd > -1  else { return }
         
         do {
