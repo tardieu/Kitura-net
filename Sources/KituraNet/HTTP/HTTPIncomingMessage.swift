@@ -275,20 +275,22 @@ public class HTTPIncomingMessage : HTTPParserDelegate {
 
     /// Instructions for when reading URL portion
     ///
-    /// - Parameter data: the data
-    func onURL(_ data: Data) {
-        url.append(data)
+    /// - Parameter bytes: The bytes of the parsed URL
+    /// - Parameter count: The number of bytes parsed
+    func onURL(_ bytes: UnsafePointer<UInt8>, count: Int) {
+        url.append(bytes, count: count)
     }
 
-    /// Instructions for when reading header field
+    /// Instructions for when reading header key
     ///
-    /// - Parameter data: the data
-    func onHeaderField (_ data: Data) {
+    /// - Parameter bytes: The bytes of the parsed header key
+    /// - Parameter count: The number of bytes parsed
+    func onHeaderField (_ bytes: UnsafePointer<UInt8>, count: Int) {
         
         if lastHeaderWasAValue {
             addHeader()
         }
-        lastHeaderField.append(data)
+        lastHeaderField.append(bytes, count: count)
 
         lastHeaderWasAValue = false
         
@@ -296,9 +298,10 @@ public class HTTPIncomingMessage : HTTPParserDelegate {
 
     /// Instructions for when reading a header value
     ///
-    /// - Parameter data: the data
-    func onHeaderValue (_ data: Data) {
-        lastHeaderValue.append(data)
+    /// - Parameter bytes: The bytes of the parsed header value
+    /// - Parameter count: The number of bytes parsed
+    func onHeaderValue (_ bytes: UnsafePointer<UInt8>, count: Int) {
+        lastHeaderValue.append(bytes, count: count)
 
         lastHeaderWasAValue = true
     }
@@ -332,9 +335,10 @@ public class HTTPIncomingMessage : HTTPParserDelegate {
 
     /// Instructions for when reading the body of the message
     ///
-    /// - Parameter data: the data
-    func onBody (_ data: Data) {
-        self.bodyChunk.append(data: data)
+    /// - Parameter bytes: The bytes of the parsed body
+    /// - Parameter count: The number of bytes parsed
+    func onBody (_ bytes: UnsafePointer<UInt8>, count: Int) {
+        self.bodyChunk.append(bytes: bytes, length: count)
 
     }
 
