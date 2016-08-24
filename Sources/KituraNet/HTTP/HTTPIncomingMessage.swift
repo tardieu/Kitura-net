@@ -53,10 +53,10 @@ public class HTTPIncomingMessage : HTTPParserDelegate {
     private var lastHeaderWasAValue = false
 
     /// Bytes of a header key that was just parsed and returned in chunks by the pars
-    private var lastHeaderField = Data()
+    private let lastHeaderField = NSMutableData()
 
     /// Bytes of a header value that was just parsed and returned in chunks by the parser
-    private var lastHeaderValue = Data()
+    private let lastHeaderValue = NSMutableData()
 
     /// The http_parser Swift wrapper
     private var httpParser: HTTPParser?
@@ -290,7 +290,7 @@ public class HTTPIncomingMessage : HTTPParserDelegate {
         if lastHeaderWasAValue {
             addHeader()
         }
-        lastHeaderField.append(bytes, count: count)
+        lastHeaderField.append(bytes, length: count)
 
         lastHeaderWasAValue = false
         
@@ -301,7 +301,7 @@ public class HTTPIncomingMessage : HTTPParserDelegate {
     /// - Parameter bytes: The bytes of the parsed header value
     /// - Parameter count: The number of bytes parsed
     func onHeaderValue (_ bytes: UnsafePointer<UInt8>, count: Int) {
-        lastHeaderValue.append(bytes, count: count)
+        lastHeaderValue.append(bytes, length: count)
 
         lastHeaderWasAValue = true
     }
@@ -309,8 +309,8 @@ public class HTTPIncomingMessage : HTTPParserDelegate {
     /// Set the header key-value pair
     private func addHeader() {
 
-        let headerKey = StringUtils.fromUtf8String(lastHeaderField)!
-        let headerValue = StringUtils.fromUtf8String(lastHeaderValue)!
+        let headerKey = NSString(bytes: lastHeaderField.bytes, length: lastHeaderField.length, encoding: String.Encoding.utf8.rawValue)!.bridge()
+        let headerValue = NSString(bytes: lastHeaderValue.bytes, length: lastHeaderValue.length, encoding: String.Encoding.utf8.rawValue)!.bridge()
         
         switch(headerKey.lowercased()) {
             // Headers with a simple value that are not merged (i.e. duplicates dropped)
@@ -328,8 +328,8 @@ public class HTTPIncomingMessage : HTTPParserDelegate {
                 headers.append(headerKey, value: headerValue)
         }
 
-        lastHeaderField.count = 0
-        lastHeaderValue.count = 0
+        lastHeaderField.length = 0
+        lastHeaderValue.length = 0
 
     }
 
