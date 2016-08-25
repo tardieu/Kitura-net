@@ -109,14 +109,14 @@ public class HTTPIncomingMessage : HTTPParserDelegate {
     
     /// Parse the message
     ///
-    /// - Parameter callback: (HTTPParserStatus) -> Void closure
-    func parse (_ buffer: Data) -> HTTPParserStatus {
+    /// - Parameter buffer: An NSData object contaning the data to be parsed
+    func parse (_ buffer: NSData) -> HTTPParserStatus {
         guard let parser = httpParser else {
             status.error = .internalError
             return status
         }
         
-        var length = buffer.count
+        var length = buffer.length
         
         guard length > 0  else {
             /* Handle unexpected EOF. Usually just close the connection. */
@@ -132,27 +132,25 @@ public class HTTPIncomingMessage : HTTPParserDelegate {
         
         var start = 0
         while status.state == .initial  &&  status.error == nil  &&  length > 0  {
-            
-            buffer.withUnsafeBytes() { [unowned self] (bytes: UnsafePointer<Int8>) in
-                let (numberParsed, upgrade) = parser.execute(bytes+start, length: length)
-                if upgrade == 1 {
-                    // TODO handle new protocol
-                }
-                else if  numberParsed != length  {
-                
-                    if  self.status.state == .reset  {
-                        // Apparently the short message was a Continue. Let's just keep on parsing
-                        start = numberParsed
-                        self.reset()
-                    }
-                    else {
-                        /* Handle error. Usually just close the connection. */
-                        self.freeHTTPParser()
-                        self.status.error = .parsedLessThanRead
-                    }
-                }
-                length -= numberParsed
+            let bytes = buffer.bytes.assumingMemoryBound(to: Int8.self)+start
+            let (numberParsed, upgrade) = parser.execute(bytes, length: length)
+            if upgrade == 1 {
+                // TODO handle new protocol
             }
+            else if  numberParsed != length  {
+                
+                if  self.status.state == .reset  {
+                    // Apparently the short message was a Continue. Let's just keep on parsing
+                    start = numberParsed
+                    self.reset()
+                }
+                else {
+                    /* Handle error. Usually just close the connection. */
+                    self.freeHTTPParser()
+                    self.status.error = .parsedLessThanRead
+                }
+            }
+            length -= numberParsed
         }
         
         return status
