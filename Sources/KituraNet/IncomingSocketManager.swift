@@ -50,16 +50,20 @@ class IncomingSocketManager  {
     #if !GCD_ASYNCH && os(Linux)
         private let maximumNumberOfEvents = 300
     
-        private let epollDescriptor: Int32
         private let epollTimeout: Int32 = 50
     
-        private let queue = DispatchQueue(label: "IncomingSocketManager")
+    private let numberOfEpollWorkers = 2
+        private var epollDescriptorsAndQueues = [(Int32, DispatchQueue)]()
     
         init() {
-            // Note: The parameter to epoll_create is ignored on modern Linux's
-            epollDescriptor = epoll_create(100)
-        
-            queue.async() { [unowned self] in self.process() }
+            for i in 0..<numberOfEpollWorkers {
+                // Note: The parameter to epoll_create is ignored on modern Linux's
+                let epollDescriptor = epoll_create(100)
+                let queue = DispatchQueue(label: "IncomingSocketManager-\(i)")
+                epollDescriptorsAndQueues.append((epollDescriptor, queue))
+    
+                queue.async() { [unowned self] in self.process(using: epollDescriptor) }
+            }
         }
     #endif
     
@@ -77,6 +81,8 @@ class IncomingSocketManager  {
             socketHandlers[socket.socketfd] = handler
             
             #if !GCD_ASYNCH && os(Linux)
+                let (epollDescriptor, _) = epollDescriptorsAndQueues[Int(socket.socketfd) % numberOfEpollWorkers]
+                
                 var event = epoll_event()
                 event.events = EPOLLIN.rawValue | EPOLLOUT.rawValue | EPOLLET.rawValue
                 event.data.fd = socket.socketfd
@@ -95,7 +101,7 @@ class IncomingSocketManager  {
     
     #if !GCD_ASYNCH && os(Linux)
         /// Wait and process the ready events by invoking the IncomingHTTPSocketHandler's hndleRead function
-        private func process() {
+        private func process(using epollDescriptor: Int32) {
             var pollingEvents = [epoll_event](repeating: epoll_event(), count: maximumNumberOfEvents)
         
             while  true  {
@@ -161,6 +167,7 @@ class IncomingSocketManager  {
             socketHandlers.removeValue(forKey: fileDescriptor)
 
             #if !GCD_ASYNCH && os(Linux)
+                let (epollDescriptor, _) = epollDescriptorsAndQueues[Int(fileDescriptor) % numberOfEpollWorkers]
                 let result = epoll_ctl(epollDescriptor, EPOLL_CTL_DEL, fileDescriptor, nil)
                 if  result == -1  {
                     Log.error("epoll_ctl failure. Error code=\(errno). Reason=\(lastError())")
