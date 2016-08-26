@@ -17,6 +17,7 @@
 import KituraSys
 import LoggerAPI
 import Socket
+import SSLService
 
 // MARK: HTTPServer
 
@@ -46,7 +47,13 @@ public class HTTPServer {
     /// TCP socket used for listening for new connections
     ///
     private var listenSocket: Socket?
-    
+
+
+    ///
+    /// SSL configuration for HTTPS
+    ///
+    public var sslConfig: SSLService.Configuration?
+
     ///
     /// Whether the HTTP server has stopped listening
     ///
@@ -74,9 +81,11 @@ public class HTTPServer {
         self.port = port
 		
 		do {
-            
-			self.listenSocket = try Socket.create()
-            
+            self.listenSocket = try Socket.create()
+
+            if let sslConfig = sslConfig {
+                self.listenSocket?.delegate = try SSLService(usingConfiguration: sslConfig)
+            }
 		} catch let error as Socket.Error {
 			print("Error reported:\n \(error.description)")
 		} catch {
